@@ -107,7 +107,9 @@ export class AmazonBedrockKnowledgebaseSlackbotStack extends cdk.Stack {
       blockPublicAccess: s3.BlockPublicAccess.BLOCK_ALL, 
       encryption: s3.BucketEncryption.S3_MANAGED,
       removalPolicy: cdk.RemovalPolicy.DESTROY,
-      autoDeleteObjects: true, enforceSSL: true,
+      autoDeleteObjects: true, 
+      enforceSSL: true,
+      versioned: true, // Add versioning
     });
     NagSuppressions.addResourceSuppressions(s3Bucket, [
       { id: 'AwsSolutions-S1', reason: 'S3 access logging not required for sample code' }
@@ -523,6 +525,17 @@ export class AmazonBedrockKnowledgebaseSlackbotStack extends cdk.Stack {
       ]
     });
 
+    // Configure account-level API Gateway logging setting
+    const apiGatewayAccountConfig = new apigateway.CfnAccount(this, 'ApiGatewayAccount', {
+      cloudWatchRoleArn: apiGatewayLogsRole.roleArn
+    });
+
+    // Create a single log group instance
+    const apiGatewayLogGroup = new logs.LogGroup(this, 'ApiGatewayAccessLogs', {
+      retention: logs.RetentionDays.ONE_WEEK, // Add log retention policy
+      removalPolicy: cdk.RemovalPolicy.DESTROY
+    });
+
     // Create API Gateway with CloudWatch logging enabled
     const api = new apigateway.RestApi(this, 'BedrockKbSlackbotApi', {
       deployOptions: {
@@ -531,23 +544,32 @@ export class AmazonBedrockKnowledgebaseSlackbotStack extends cdk.Stack {
         dataTraceEnabled: true,
         metricsEnabled: true,
         tracingEnabled: true,
-        accessLogDestination: new apigateway.LogGroupLogDestination(
-          new logs.LogGroup(this, 'ApiGatewayAccessLogs')
-        ),
+        accessLogDestination: new apigateway.LogGroupLogDestination(apiGatewayLogGroup),
         accessLogFormat: apigateway.AccessLogFormat.jsonWithStandardFields()
       }
     });
+    
+    // Ensure that API Gateway depends on the account configuration
+    api.node.addDependency(apiGatewayAccountConfig);
 
-    // Add the CloudWatch Logs role to the API Gateway
-    const cfnApi = api.node.defaultChild as apigateway.CfnRestApi;
-    cfnApi.addPropertyOverride('LoggingConfiguration', {
-      LoggingLevel: 'INFO',
-      DataTraceEnabled: true,
-      MetricsEnabled: true,
-      TracingEnabled: true,
-      AccessLoggingEnabled: true,
-      CloudWatchRoleArn: apiGatewayLogsRole.roleArn
+    // Add access log settings to the API Gateway stage, but without CloudWatchRoleArn
+    const stage = api.deploymentStage.node.defaultChild as apigateway.CfnStage;
+    stage.addPropertyOverride('AccessLogSetting', {
+      DestinationArn: apiGatewayLogGroup.logGroupArn,
+      Format: JSON.stringify({
+        requestId: '$context.requestId',
+        ip: '$context.identity.sourceIp',
+        caller: '$context.identity.caller',
+        user: '$context.identity.user',
+        requestTime: '$context.requestTime',
+        httpMethod: '$context.httpMethod',
+        resourcePath: '$context.resourcePath',
+        status: '$context.status',
+        protocol: '$context.protocol',
+        responseLength: '$context.responseLength'
+      })
     });
+    stage.addPropertyOverride('TracingEnabled', true);
 
     // Define the '/slack/ask-aws' API resource with a POST method
     const bedrockKbSlackbotResource = api.root.addResource('slack').addResource('ask-aws');
