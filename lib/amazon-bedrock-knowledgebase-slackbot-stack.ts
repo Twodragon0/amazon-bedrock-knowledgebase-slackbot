@@ -515,29 +515,43 @@ export class AmazonBedrockKnowledgebaseSlackbotStack extends cdk.Stack {
     bedrockKbSlackbotFunction.addToRolePolicy(lambdaGRinvokePolicy)
     bedrockKbSlackbotFunction.addToRolePolicy(lambdaSSMPolicy)
 
-    // Define the API Gateway resource and associate the trigger for Industrial Query Lambda function
-    const bedrockKbSlackbotApi = new apigateway.LambdaRestApi(this, 'BedrockKbSlackbotApi', {
-      handler: bedrockKbSlackbotFunction,
-      deployOptions: {
-        accessLogDestination: new apigateway.LogGroupLogDestination(new logs.LogGroup(this, 'BedrockKbSlackbotApiLogGroup')),
-        accessLogFormat: apigateway.AccessLogFormat.jsonWithStandardFields({
-          caller: false,
-          httpMethod: true,
-          ip: true,
-          protocol: true,
-          requestTime: true,
-          resourcePath: true,
-          responseLength: true,
-          status: true,
-          user: true,
-        })
-      },
-      proxy: false
+    // Create an IAM role for API Gateway CloudWatch Logs
+    const apiGatewayLogsRole = new iam.Role(this, 'ApiGatewayLogsRole', {
+      assumedBy: new iam.ServicePrincipal('apigateway.amazonaws.com'),
+      managedPolicies: [
+        iam.ManagedPolicy.fromAwsManagedPolicyName('service-role/AmazonAPIGatewayPushToCloudWatchLogs')
+      ]
     });
 
-    // Define the '/industrial/query' API resource with a POST method
-    const bedrockKbSlackbotResource = bedrockKbSlackbotApi.root.addResource('slack').addResource('ask-aws');
-    bedrockKbSlackbotResource.addMethod('POST')
+    // Create API Gateway with CloudWatch logging enabled
+    const api = new apigateway.RestApi(this, 'BedrockKbSlackbotApi', {
+      deployOptions: {
+        stageName: 'prod',
+        loggingLevel: apigateway.MethodLoggingLevel.INFO,
+        dataTraceEnabled: true,
+        metricsEnabled: true,
+        tracingEnabled: true,
+        accessLogDestination: new apigateway.LogGroupLogDestination(
+          new logs.LogGroup(this, 'ApiGatewayAccessLogs')
+        ),
+        accessLogFormat: apigateway.AccessLogFormat.jsonWithStandardFields()
+      }
+    });
+
+    // Add the CloudWatch Logs role to the API Gateway
+    const cfnApi = api.node.defaultChild as apigateway.CfnRestApi;
+    cfnApi.addPropertyOverride('LoggingConfiguration', {
+      LoggingLevel: 'INFO',
+      DataTraceEnabled: true,
+      MetricsEnabled: true,
+      TracingEnabled: true,
+      AccessLoggingEnabled: true,
+      CloudWatchRoleArn: apiGatewayLogsRole.roleArn
+    });
+
+    // Define the '/slack/ask-aws' API resource with a POST method
+    const bedrockKbSlackbotResource = api.root.addResource('slack').addResource('ask-aws');
+    bedrockKbSlackbotResource.addMethod('POST', new apigateway.LambdaIntegration(bedrockKbSlackbotFunction));
 
     // CDK NAG Suppression Rules - IAM
     //============================================
@@ -587,6 +601,30 @@ export class AmazonBedrockKnowledgebaseSlackbotStack extends cdk.Stack {
         { id: 'AwsSolutions-APIG6', reason: 'Logging is enabled for the API' },
         { id: 'AwsSolutions-APIG4', reason: 'API Auth is not provided in demo/sample code' },
         { id: 'AwsSolutions-COG4', reason: 'Cognito is not being used in the sample code' }
+      ]
+    );
+
+    // Additional CDK NAG Suppression Rules
+    //============================================
+    NagSuppressions.addResourceSuppressionsByPath(
+      this,
+      [
+        '/AmazonBedrockKnowledgebaseSlackbotStack/ApiGatewayLogsRole/Resource',
+      ],
+      [
+        { id: 'AwsSolutions-IAM4', reason: 'AWS managed policy is required for API Gateway CloudWatch logs' },
+      ]
+    );
+
+    // Suppress CdkNagValidationFailure for Custom Resource
+    NagSuppressions.addResourceSuppressionsByPath(
+      this,
+      [
+        '/AmazonBedrockKnowledgebaseSlackbotStack/AWS679f53fac002430cb0da5b7982bd2287/Resource',
+      ],
+      [
+        { id: 'AwsSolutions-L1', reason: 'Custom resource is required for vector index creation' },
+        { id: 'CdkNagValidationFailure', reason: 'Suppressing validation error for intrinsic functions' },
       ]
     );
 
