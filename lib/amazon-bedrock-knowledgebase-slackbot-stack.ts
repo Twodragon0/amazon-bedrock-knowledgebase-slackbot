@@ -228,7 +228,7 @@ export class AmazonBedrockKnowledgebaseSlackbotStack extends cdk.Stack {
     const GUARD_RAIL_ID = Guardrail.attrGuardrailId
     const GUARD_RAIL_VERSION = GuardrailVersion.attrVersion
     
-    //Define OpenSearchServerless Collection & depends on policies
+    // Define OpenSearchServerless Collection & depends on policies
     const osCollection = new ops.CfnCollection(this, 'osCollection', {
       name: COLLECTION_NAME,
       description: 'Slack bedrock vector db',
@@ -273,7 +273,7 @@ export class AmazonBedrockKnowledgebaseSlackbotStack extends cdk.Stack {
     });
     osCollection.addDependency(aossNetworkPolicy);
 
-    // Define createIndexFunction execution role and policy. Managed role 'AWSLambdaBasicExecutionRole'
+    // Define createIndexFunction execution role and policy
     const createIndexFunctionRole = new iam.Role(this, 'CreateIndexFunctionRole', {
       assumedBy: new iam.ServicePrincipal('lambda.amazonaws.com'),
     });
@@ -311,7 +311,7 @@ export class AmazonBedrockKnowledgebaseSlackbotStack extends cdk.Stack {
       role: createIndexFunctionRole
     });
 
-    // Define OpenSearchServerless access policy to access the index and collection from the Amazon Bedrock execution role and the lambda execution role
+    // Define OpenSearchServerless access policy
     const aossAccessPolicy = new ops.CfnAccessPolicy(this, 'aossAccessPolicy', {
       name: 'bedrock-kb-access-policy',
       type: 'data',
@@ -329,7 +329,6 @@ export class AmazonBedrockKnowledgebaseSlackbotStack extends cdk.Stack {
             Permission: ['aoss:*'],
           },
         ],
-        // Add principal of bedrock execution role and lambda execution role
         Principal: [
           bedrockExecutionRole.roleArn,
           createIndexFunction.role?.roleArn,
@@ -338,7 +337,6 @@ export class AmazonBedrockKnowledgebaseSlackbotStack extends cdk.Stack {
       }
     ]),
     });
-    //this.serverlessCollection = osCollection;
     osCollection.addDependency(aossAccessPolicy);
     
     const Endpoint = `${osCollection.attrId}.${cdk.Stack.of(this).region}.aoss.amazonaws.com`;
@@ -373,7 +371,6 @@ export class AmazonBedrockKnowledgebaseSlackbotStack extends cdk.Stack {
             Endpoint: Endpoint,
           }),
         },
-        //physicalResourceId: cr.PhysicalResourceId.of('vectorIndexResource'),
       },
       policy: cr.AwsCustomResourcePolicy.fromStatements([
         new iam.PolicyStatement({
@@ -384,8 +381,10 @@ export class AmazonBedrockKnowledgebaseSlackbotStack extends cdk.Stack {
       timeout: cdk.Duration.seconds(60),
     });
 
-    // Ensure vectorIndex depends on collection
+    // Ensure vectorIndex depends on collection and access policy
     vectorIndex.node.addDependency(osCollection);
+    vectorIndex.node.addDependency(aossAccessPolicy);
+    vectorIndex.node.addDependency(createIndexFunction);
 
     // Define a Bedrock knowledge base with type opensearch serverless and titan for embedding model
     const bedrockkb = new bedrock.CfnKnowledgeBase(this, 'bedrockkb', {
@@ -411,12 +410,13 @@ export class AmazonBedrockKnowledgebaseSlackbotStack extends cdk.Stack {
         },
       },
     });
-    // add a dependency for bedrock kb on the custom resource. Enables vector index to be created before KB
-    bedrockkb.node.addDependency(vectorIndex)
-    bedrockkb.node.addDependency(createIndexFunction)
-    bedrockkb.node.addDependency(osCollection)
-    bedrockkb.node.addDependency(bedrockExecutionRole)
-    
+
+    // Add explicit dependencies for bedrock kb
+    bedrockkb.node.addDependency(vectorIndex);
+    bedrockkb.node.addDependency(osCollection);
+    bedrockkb.node.addDependency(aossAccessPolicy);
+    bedrockkb.node.addDependency(bedrockExecutionRole);
+
     // Define a bedrock knowledge base data source with S3 bucket
     const bedrockKbDataSource = new bedrock.CfnDataSource(this, 'bedrockKbDataSource', {
       name: BEDROCK_KB_DATA_SOURCE,
