@@ -435,14 +435,14 @@ export class AmazonBedrockKnowledgebaseSlackbotStack extends cdk.Stack {
     const lambdaBedrockModelPolicy = new PolicyStatement()
     lambdaBedrockModelPolicy.addActions("bedrock:InvokeModel")
     lambdaBedrockModelPolicy.addResources(`arn:aws:bedrock:${cdk.Stack.of(this).region}::foundation-model/${RAG_MODEL_ID}`)
-    // 표준 모델 패턴
+    // Standard model pattern
     lambdaBedrockModelPolicy.addResources("arn:aws:bedrock:*::foundation-model/*")
-    // 'us.' 접두사가 있는 특별 모델 패턴
+    // Special model pattern with 'us.' prefix
     lambdaBedrockModelPolicy.addResources(`arn:aws:bedrock:${cdk.Stack.of(this).region}:${cdk.Stack.of(this).account}:inference-profile/*`)
     lambdaBedrockModelPolicy.addResources(`arn:aws:bedrock:${cdk.Stack.of(this).region}:${cdk.Stack.of(this).account}:*/*`)
     lambdaBedrockModelPolicy.addCondition("StringEquals", {"aws:ResourceAccount": this.account})
 
-    // RetrieveAndGenerate 작업을 위한 명시적 권한 추가
+    // Add explicit permissions for RetrieveAndGenerate operation
     const lambdaBedrockOperationsPolicy = new PolicyStatement()
     lambdaBedrockOperationsPolicy.addActions(
       "bedrock:InvokeModel",
@@ -461,28 +461,7 @@ export class AmazonBedrockKnowledgebaseSlackbotStack extends cdk.Stack {
     lambdaBedrockKbPolicy.addActions("bedrock:RetrieveAndGenerate");
     lambdaBedrockKbPolicy.addResources(`arn:aws:bedrock:${cdk.Stack.of(this).region}:${cdk.Stack.of(this).account}:knowledge-base/${bedrockkb.attrKnowledgeBaseId}`);
 
-    // Create an IAM policy to allow the lambda to call SSM
-    const lambdaSSMPolicy = new PolicyStatement();
-    lambdaSSMPolicy.addActions("ssm:GetParameter");
-    //lambdaSSMPolicy.addActions("ssm:GetParameters");
-    // lambdaSSMPolicy.addResources("botTokenParameter.parameterArn");
-    // lambdaSSMPolicy.addResources("signingBotSecretParameter.parameterArn");
-    lambdaSSMPolicy.addResources(`arn:aws:ssm:${cdk.Stack.of(this).region}:${cdk.Stack.of(this).account}:parameter${botTokenParameter.parameterName}`);
-    lambdaSSMPolicy.addResources(`arn:aws:ssm:${cdk.Stack.of(this).region}:${cdk.Stack.of(this).account}:parameter${signingSecretParameter.parameterName}`);
-    
-    //arn:aws:ssm:us-east-1:859498851685:parameter/slack/bot-token/parameter
-    //"arn:aws:ssm:us-east-2:123456789012:parameter/prod-*"
-    //(`arn:aws:bedrock:${cdk.Stack.of(this).region}:${cdk.Stack.of(this).account}:knowledge-base/${bedrockkb.attrKnowledgeBaseId}`);
-  
-    const lambdaReinvokePolicy = new PolicyStatement();
-    lambdaReinvokePolicy.addActions("lambda:InvokeFunction");
-    lambdaReinvokePolicy.addResources(`arn:aws:lambda:${cdk.Stack.of(this).region}:${cdk.Stack.of(this).account}:function:AmazonBedrock*`);
-
-    const lambdaGRinvokePolicy = new PolicyStatement();
-    lambdaGRinvokePolicy.addActions("bedrock:ApplyGuardrail");
-    lambdaGRinvokePolicy.addResources(`arn:aws:bedrock:${cdk.Stack.of(this).region}:${cdk.Stack.of(this).account}:guardrail/*`);
-
-    // Claude 3.5 Sonnet 같은 추가 모델을 위한 권한
+    // Additional permissions for models like Claude 3.5 Sonnet
     const lambdaBedrockAdditionalModelPolicy = new PolicyStatement()
     lambdaBedrockAdditionalModelPolicy.addActions(
       "bedrock:GetInferenceProfile",
@@ -544,7 +523,7 @@ export class AmazonBedrockKnowledgebaseSlackbotStack extends cdk.Stack {
     bedrockKbSlackbotFunction.addToRolePolicy(lambdaBedrockModelPolicy)
     bedrockKbSlackbotFunction.addToRolePolicy(lambdaBedrockOperationsPolicy)
     bedrockKbSlackbotFunction.addToRolePolicy(lambdaBedrockKbPolicy)
-    bedrockKbSlackbotFunction.addToRolePolicy(lambdaBedrockAdditionalModelPolicy)  // 추가 권한만 부여
+    bedrockKbSlackbotFunction.addToRolePolicy(lambdaBedrockAdditionalModelPolicy)  // Add additional permissions only
     bedrockKbSlackbotFunction.addToRolePolicy(lambdaReinvokePolicy)
     bedrockKbSlackbotFunction.addToRolePolicy(lambdaGRinvokePolicy)
     bedrockKbSlackbotFunction.addToRolePolicy(lambdaSSMPolicy)
