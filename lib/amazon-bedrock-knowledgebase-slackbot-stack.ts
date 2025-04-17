@@ -40,7 +40,7 @@ import * as ssm from 'aws-cdk-lib/aws-ssm';
 // Amazon Titan Models: "amazon.titan-text-premier-v1:0"
 // Anthropic Claude2  Models:  "anthropic.claude-instant-v1" || "anthropic.claude-v2:1"
 // Anthropic Claude3  Models:  "anthropic.claude-3-haiku-20240307-v1:0" || "anthropic.claude-3-sonnet-20240229-v1:0" || "anthropic.claude-3-5-sonnet-20240620-v1:0" 
-const RAG_MODEL_ID = "anthropic.claude-3-sonnet-20240229-v1:0";
+const RAG_MODEL_ID = "us.anthropic.claude-3-5-sonnet-20241022-v2:0";
 
 // RAG Embeddings Model ID (Update dependent on model access and AWS Regional Support):
 // Amazon Titan Embedding: "amazon.titan-embed-text-v1" || "amazon.titan-embed-text-v2:0"
@@ -435,6 +435,25 @@ export class AmazonBedrockKnowledgebaseSlackbotStack extends cdk.Stack {
     const lambdaBedrockModelPolicy = new PolicyStatement()
     lambdaBedrockModelPolicy.addActions("bedrock:InvokeModel")
     lambdaBedrockModelPolicy.addResources(`arn:aws:bedrock:${cdk.Stack.of(this).region}::foundation-model/${RAG_MODEL_ID}`)
+    // 표준 모델 패턴
+    lambdaBedrockModelPolicy.addResources("arn:aws:bedrock:*::foundation-model/*")
+    // 'us.' 접두사가 있는 특별 모델 패턴
+    lambdaBedrockModelPolicy.addResources(`arn:aws:bedrock:${cdk.Stack.of(this).region}:${cdk.Stack.of(this).account}:inference-profile/*`)
+    lambdaBedrockModelPolicy.addResources(`arn:aws:bedrock:${cdk.Stack.of(this).region}:${cdk.Stack.of(this).account}:*/*`)
+    lambdaBedrockModelPolicy.addCondition("StringEquals", {"aws:ResourceAccount": this.account})
+
+    // RetrieveAndGenerate 작업을 위한 명시적 권한 추가
+    const lambdaBedrockOperationsPolicy = new PolicyStatement()
+    lambdaBedrockOperationsPolicy.addActions(
+      "bedrock:InvokeModel",
+      "bedrock:Retrieve",
+      "bedrock:RetrieveAndGenerate",
+      "bedrock:GetFoundationModel",
+      "bedrock:ListFoundationModels",
+      "bedrock:GetInferenceProfile"
+    )
+    lambdaBedrockOperationsPolicy.addResources("*")
+    lambdaBedrockOperationsPolicy.addCondition("StringEquals", {"aws:ResourceAccount": this.account})
 
     // Create an IAM policy to allow the lambda to call Retrieve and Retrieve and Generate on a Bedrock Knowledge Base 
     const lambdaBedrockKbPolicy = new PolicyStatement();
@@ -462,6 +481,17 @@ export class AmazonBedrockKnowledgebaseSlackbotStack extends cdk.Stack {
     const lambdaGRinvokePolicy = new PolicyStatement();
     lambdaGRinvokePolicy.addActions("bedrock:ApplyGuardrail");
     lambdaGRinvokePolicy.addResources(`arn:aws:bedrock:${cdk.Stack.of(this).region}:${cdk.Stack.of(this).account}:guardrail/*`);
+
+    // Claude 3.5 Sonnet 같은 추가 모델을 위한 권한
+    const lambdaBedrockAdditionalModelPolicy = new PolicyStatement()
+    lambdaBedrockAdditionalModelPolicy.addActions(
+      "bedrock:GetInferenceProfile",
+      "bedrock:ListInferenceProfiles",
+      "bedrock:InvokeModel",
+      "bedrock:GetModelInvocationLoggingConfiguration"
+    )
+    lambdaBedrockAdditionalModelPolicy.addResources("*")
+    lambdaBedrockAdditionalModelPolicy.addCondition("StringEquals", {"aws:ResourceAccount": this.account})
 
     // Create the SlackDot (slash command) integration to Amazon Bedrock Knowledge base responses. 
     const bedrockKbSlackbotFunction = new lambda.Function(this, 'BedrockKbSlackbotFunction', {
@@ -512,7 +542,9 @@ export class AmazonBedrockKnowledgebaseSlackbotStack extends cdk.Stack {
 
     // Attach listed IAM policies to the Lambda functions Execution role
     bedrockKbSlackbotFunction.addToRolePolicy(lambdaBedrockModelPolicy)
+    bedrockKbSlackbotFunction.addToRolePolicy(lambdaBedrockOperationsPolicy)
     bedrockKbSlackbotFunction.addToRolePolicy(lambdaBedrockKbPolicy)
+    bedrockKbSlackbotFunction.addToRolePolicy(lambdaBedrockAdditionalModelPolicy)  // 추가 권한만 부여
     bedrockKbSlackbotFunction.addToRolePolicy(lambdaReinvokePolicy)
     bedrockKbSlackbotFunction.addToRolePolicy(lambdaGRinvokePolicy)
     bedrockKbSlackbotFunction.addToRolePolicy(lambdaSSMPolicy)
