@@ -527,9 +527,16 @@ export class AmazonBedrockKnowledgebaseSlackbotStack extends cdk.Stack {
     bedrockKbSlackbotFunction.addToRolePolicy(lambdaBedrockOperationsPolicy)
     bedrockKbSlackbotFunction.addToRolePolicy(lambdaBedrockKbPolicy)
     bedrockKbSlackbotFunction.addToRolePolicy(lambdaBedrockAdditionalModelPolicy)  // Add additional permissions only
-    bedrockKbSlackbotFunction.addToRolePolicy(lambdaReinvokePolicy)
-    bedrockKbSlackbotFunction.addToRolePolicy(lambdaGRinvokePolicy)
-    bedrockKbSlackbotFunction.addToRolePolicy(lambdaSSMPolicy)
+    
+    // Grant SSM Parameter Store read permissions (secrets are accessed via SSM)
+    bedrockKbSlackbotFunction.addToRolePolicy(new PolicyStatement({
+      actions: ['ssm:GetParameter', 'ssm:GetParameters'],
+      resources: [
+        botTokenParameter.parameterArn,
+        signingSecretParameter.parameterArn
+      ],
+      effect: iam.Effect.ALLOW
+    }))
 
     // Create an IAM role for API Gateway CloudWatch Logs
     const apiGatewayLogsRole = new iam.Role(this, 'ApiGatewayLogsRole', {
