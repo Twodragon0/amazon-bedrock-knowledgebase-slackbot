@@ -14,7 +14,6 @@ from diagrams.aws.security import SecretsManager, IAM
 from diagrams.aws.management import Cloudwatch
 from diagrams.onprem.client import User
 from diagrams.onprem.chat import Slack
-from diagrams.custom import Custom
 
 def generate_architecture_diagram():
     """Generate the architecture diagram for the Slackbot application."""
@@ -81,7 +80,8 @@ def generate_architecture_diagram():
         bedrock_kb >> Edge(label="Generate Response") >> bedrock_model
         bedrock_kb >> Edge(label="Embed Documents") >> bedrock_embedding
         
-        vector_db >> vector_index
+        # Note: vector_index is part of vector_db collection, no direct connection needed
+        # vector_db >> vector_index  # Removed: Statement has no effect
         
         bedrock_kb >> Edge(label="Ingest Documents") >> s3_bucket
         
