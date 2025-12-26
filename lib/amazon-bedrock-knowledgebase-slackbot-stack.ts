@@ -431,6 +431,9 @@ export class AmazonBedrockKnowledgebaseSlackbotStack extends cdk.Stack {
       }
     });
     
+    // Add explicit dependency to ensure data source is created after knowledge base
+    bedrockKbDataSource.node.addDependency(bedrockkb);
+    
     // Create an IAM policy to allow the lambda to invoke models in Amazon Bedrock
     const lambdaBedrockModelPolicy = new PolicyStatement()
     lambdaBedrockModelPolicy.addActions("bedrock:InvokeModel")
