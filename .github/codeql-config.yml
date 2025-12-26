@@ -2,67 +2,15 @@
 # Customizes CodeQL analysis for this repository
 # https://docs.github.com/en/code-security/code-scanning/creating-an-advanced-setup-for-code-scanning/customizing-your-advanced-setup-for-code-scanning
 
-name: "Security and Quality"
-
+# Using default security query packs instead of individual CWE queries
+# This is more reliable and avoids issues with missing query paths
 packs:
   javascript:
-    - codeql/javascript-queries:Security/CWE-079
-    - codeql/javascript-queries:Security/CWE-089
-    - codeql/javascript-queries:Security/CWE-094
-    - codeql/javascript-queries:Security/CWE-116
-    - codeql/javascript-queries:Security/CWE-209
-    - codeql/javascript-queries:Security/CWE-295
-    - codeql/javascript-queries:Security/CWE-312
-    - codeql/javascript-queries:Security/CWE-319
-    - codeql/javascript-queries:Security/CWE-326
-    - codeql/javascript-queries:Security/CWE-327
-    - codeql/javascript-queries:Security/CWE-330
-    - codeql/javascript-queries:Security/CWE-338
-    - codeql/javascript-queries:Security/CWE-400
-    - codeql/javascript-queries:Security/CWE-502
-    - codeql/javascript-queries:Security/CWE-601
-    - codeql/javascript-queries:Security/CWE-614
-    - codeql/javascript-queries:Security/CWE-643
-    - codeql/javascript-queries:Security/CWE-730
-    - codeql/javascript-queries:Security/CWE-754
-    - codeql/javascript-queries:Security/CWE-776
-    - codeql/javascript-queries:Security/CWE-798
-    - codeql/javascript-queries:Security/CWE-807
-    - codeql/javascript-queries:Security/CWE-835
-    - codeql/javascript-queries:Security/CWE-915
-    - codeql/javascript-queries:Security/CWE-918
-    - codeql/javascript-queries:Security/CWE-922
-    - codeql/javascript-queries:Security/CWE-937
-    - codeql/javascript-queries:Security/CWE-943
+    - codeql/javascript-queries:Security
+    - codeql/javascript-queries:SecurityExtended
   python:
-    - codeql/python-queries:Security/CWE-079
-    - codeql/python-queries:Security/CWE-089
-    - codeql/python-queries:Security/CWE-094
-    - codeql/python-queries:Security/CWE-116
-    - codeql/python-queries:Security/CWE-209
-    - codeql/python-queries:Security/CWE-295
-    - codeql/python-queries:Security/CWE-312
-    - codeql/python-queries:Security/CWE-319
-    - codeql/python-queries:Security/CWE-326
-    - codeql/python-queries:Security/CWE-327
-    - codeql/python-queries:Security/CWE-330
-    - codeql/python-queries:Security/CWE-338
-    - codeql/python-queries:Security/CWE-400
-    - codeql/python-queries:Security/CWE-502
-    - codeql/python-queries:Security/CWE-601
-    - codeql/python-queries:Security/CWE-614
-    - codeql/python-queries:Security/CWE-643
-    - codeql/python-queries:Security/CWE-730
-    - codeql/python-queries:Security/CWE-754
-    - codeql/python-queries:Security/CWE-776
-    - codeql/python-queries:Security/CWE-798
-    - codeql/python-queries:Security/CWE-807
-    - codeql/python-queries:Security/CWE-835
-    - codeql/python-queries:Security/CWE-915
-    - codeql/python-queries:Security/CWE-918
-    - codeql/python-queries:Security/CWE-922
-    - codeql/python-queries:Security/CWE-937
-    - codeql/python-queries:Security/CWE-943
+    - codeql/python-queries:Security
+    - codeql/python-queries:SecurityExtended
 
 query-filters:
   - exclude:
