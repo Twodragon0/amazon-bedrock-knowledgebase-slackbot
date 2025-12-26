@@ -37,7 +37,136 @@ This project deploys a serverless Slack chatbot that integrates with Amazon Bedr
 
 ## 🏗️ Architecture
 
-### Architecture Diagram
+### System Architecture
+
+```mermaid
+graph TB
+    subgraph "User Interface"
+        SU[Slack User]
+        SW[Slack Workspace]
+    end
+    
+    subgraph "API Layer"
+        AG[API Gateway<br/>/slack/ask-aws<br/>POST Method]
+    end
+    
+    subgraph "Compute Layer"
+        LF1[BedrockKbSlackbotFunction<br/>Python 3.12<br/>Slack Integration]
+        LF2[CreateIndexFunction<br/>Custom Resource<br/>OpenSearch Setup]
+    end
+    
+    subgraph "Secrets Management"
+        SM[Secrets Manager<br/>Slack Bot Token<br/>Signing Secret]
+        SSM[SSM Parameter Store<br/>Parameter References]
+    end
+    
+    subgraph "Amazon Bedrock"
+        KB[Knowledge Base<br/>AWS Well-Architected<br/>Framework Docs]
+        GR[Guardrails<br/>Content Filtering<br/>PII Protection]
+        FM[Foundation Models<br/>Claude 3.5 Sonnet<br/>RAG Generation]
+        EM[Embedding Model<br/>Titan Embeddings v2<br/>Vector Generation]
+    end
+    
+    subgraph "Vector Database"
+        OSS[OpenSearch Serverless<br/>Collection: slack-bedrock-vector-db<br/>Index: slack-bedrock-os-index]
+        VS[Vector Search<br/>1024 dimensions<br/>HNSW Algorithm]
+    end
+    
+    subgraph "Storage"
+        S3[S3 Bucket<br/>Knowledge Base Documents<br/>Encrypted SSE-S3]
+    end
+    
+    subgraph "Monitoring"
+        CW[CloudWatch Logs<br/>API Gateway Logs<br/>Lambda Logs]
+    end
+    
+    SU -->|Slash Command<br/>/ask-aws| SW
+    SW -->|POST Request| AG
+    AG -->|Invoke| LF1
+    
+    LF1 -->|Read Secrets| SM
+    LF1 -->|Read Parameters| SSM
+    LF1 -->|RetrieveAndGenerate| KB
+    
+    KB -->|Query Vectors| OSS
+    KB -->|Apply Filters| GR
+    KB -->|Generate Response| FM
+    KB -->|Create Embeddings| EM
+    
+    OSS --> VS
+    KB -->|Ingest Documents| S3
+    
+    LF2 -->|Create Index| OSS
+    
+    LF1 -->|Log Events| CW
+    AG -->|Access Logs| CW
+    
+    LF1 -->|Response| AG
+    AG -->|Response| SW
+    SW -->|Display Answer| SU
+    
+    style LF1 fill:#e1f5ff
+    style KB fill:#fff4e1
+    style OSS fill:#ffe1f5
+    style SM fill:#e8f5e9
+    style GR fill:#e8f5e9
+    style CW fill:#f3e5f5
+```
+
+### Data Flow
+
+```mermaid
+sequenceDiagram
+    participant SU as Slack User
+    participant SW as Slack Workspace
+    participant AG as API Gateway
+    participant LF as Lambda Function
+    participant SM as Secrets Manager
+    participant KB as Bedrock KB
+    participant GR as Guardrails
+    participant OSS as OpenSearch Serverless
+    participant FM as Claude 3.5 Sonnet
+    participant S3 as S3 Bucket
+    participant CW as CloudWatch
+    
+    SU->>SW: /ask-aws "What are S3 security best practices?"
+    SW->>AG: POST /slack/ask-aws (Signed Request)
+    
+    AG->>AG: Verify Slack Signing Secret
+    AG->>LF: Invoke Lambda Function
+    
+    LF->>SM: Retrieve Slack Bot Token
+    SM-->>LF: Bot Token
+    
+    LF->>LF: Validate Slack Request
+    LF->>LF: Extract User Query
+    
+    LF->>KB: RetrieveAndGenerate(query)
+    
+    KB->>OSS: Query Vector Database
+    OSS-->>KB: Relevant Document Chunks
+    
+    KB->>GR: Apply Content Filtering
+    GR-->>KB: Filtered Content
+    
+    KB->>FM: Generate Response with Context
+    FM-->>KB: Generated Answer
+    
+    KB-->>LF: Response Text
+    
+    LF->>LF: Format Slack Response
+    LF->>SW: POST Response (Slack API)
+    SW-->>SU: Display Answer
+    
+    LF->>CW: Log Request/Response
+    AG->>CW: Log API Gateway Events
+    
+    Note over KB,S3: Document Ingestion (Background)
+    S3->>KB: Sync Documents
+    KB->>OSS: Index Embeddings
+```
+
+### Architecture Diagram (ASCII)
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────────┐
@@ -53,7 +182,7 @@ This project deploys a serverless Slack chatbot that integrates with Amazon Bedr
 ┌─────────────────────────────────────────────────────────────────────────────┐
 │                           Slack Workspace                                    │
 └──────┬──────────────────────────────────────────────────────────────────────┘
-       │ POST Request
+       │ POST Request (Signed)
        ▼
 ┌─────────────────────────────────────────────────────────────────────────────┐
 │                         API Gateway                                          │
@@ -137,17 +266,22 @@ This project deploys a serverless Slack chatbot that integrates with Amazon Bedr
 └─────────────────────────────────────────────────────────────────────────────┘
 ```
 
-### Data Flow
+### Detailed Data Flow Steps
 
 1. **User Interaction**: User sends `/ask-aws` slash command in Slack with a question
-2. **Slack → API Gateway**: Slack sends POST request to API Gateway endpoint
-3. **API Gateway → Lambda**: API Gateway invokes Lambda function with request
-4. **Secrets Retrieval**: Lambda retrieves Slack credentials from Secrets Manager/SSM
-5. **Bedrock Query**: Lambda calls Bedrock Knowledge Base `RetrieveAndGenerate` API
-6. **Vector Search**: Bedrock queries OpenSearch Serverless vector database
-7. **Content Filtering**: Bedrock applies Guardrails for content safety
-8. **Response Generation**: Bedrock generates response using Claude 3.5 Sonnet model
-9. **Response Delivery**: Response is returned to Slack and displayed to user
+2. **Slack → API Gateway**: Slack sends POST request to API Gateway endpoint with signed payload
+3. **API Gateway Verification**: API Gateway verifies Slack signing secret
+4. **API Gateway → Lambda**: API Gateway invokes Lambda function with request
+5. **Secrets Retrieval**: Lambda retrieves Slack credentials from Secrets Manager/SSM
+6. **Request Validation**: Lambda validates Slack request signature
+7. **Query Extraction**: Lambda extracts user query from Slack payload
+8. **Bedrock Query**: Lambda calls Bedrock Knowledge Base `RetrieveAndGenerate` API
+9. **Vector Search**: Bedrock queries OpenSearch Serverless vector database for relevant chunks
+10. **Content Filtering**: Bedrock applies Guardrails for content safety and PII protection
+11. **Response Generation**: Bedrock generates response using Claude 3.5 Sonnet model with retrieved context
+12. **Response Formatting**: Lambda formats response for Slack
+13. **Response Delivery**: Response is returned to Slack and displayed to user
+14. **Logging**: All events are logged to CloudWatch for monitoring and audit
 
 ### Components
 
